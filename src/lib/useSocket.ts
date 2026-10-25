@@ -10,7 +10,7 @@ export function useLivePrices() {
         .then((res) => res.json())
         .then((initial) => setPrices(initial));
   
-      const socket: Socket = io("http://localhost:3000");
+      const socket: Socket = io();
       socket.on("price-update", (data) => {
         setPrices((prev) => ({ ...prev, [data.symbol]: data }));
       });

@@ -32,6 +32,7 @@ async function fetchAllStocks() {
 
   console.log("Fetched and stored all stocks:", new Date().toISOString());
 }
+
 async function snapshotToDatabase() {
     const client = await getRedisClient();
   
@@ -59,10 +60,18 @@ async function snapshotToDatabase() {
   
     await prisma.priceHistory.createMany({ data: rows });
     console.log(`Snapshot: wrote ${rows.length} rows at`, new Date().toISOString());
-  }
-export async function register() {
-    if (process.env.NEXT_RUNTIME !== "nodejs") return;
-    fetchAllStocks(); // run once immediately on server start
-    setInterval(fetchAllStocks, 60000); // then every 60 seconds
-    setInterval(snapshotToDatabase, 120000); // DB snapshot, every 2 min
 }
+  export async function register() {
+    if (process.env.NEXT_RUNTIME !== "nodejs") return;
+
+    const runFetch = () => {
+      fetchAllStocks().catch((err) => console.error("fetchAllStocks failed:", err));
+    };
+    const runSnapshot = () => {
+      snapshotToDatabase().catch((err) => console.error("snapshotToDatabase failed:", err));
+    };
+
+    runFetch();
+    setInterval(runFetch, 60000);
+    setInterval(runSnapshot, 120000);
+  }
