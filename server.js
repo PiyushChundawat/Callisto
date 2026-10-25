@@ -15,7 +15,7 @@ app.prepare().then(async () => {
   const httpServer = createServer((req, res) => handle(req, res));
   const io = new Server(httpServer);
 
-  const subscriber = createClient({ url: "redis://localhost:6379" });
+  const subscriber = createClient({ url: process.env.REDIS_URL || "redis://localhost:6379" });
   await subscriber.connect();
 
   await subscriber.subscribe("price-updates", (message) => {
@@ -31,7 +31,8 @@ app.prepare().then(async () => {
     });
   });
 
-  httpServer.listen(3000, () => {
-    console.log("Helios server ready on http://localhost:3000");
+  const port = process.env.PORT || 3000;
+  httpServer.listen(port, () => {
+    console.log("Helios server ready on port", port);
   });
 });

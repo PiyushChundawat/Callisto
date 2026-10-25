@@ -49,26 +49,42 @@ export default async function PortfolioPage() {
   const totalValueNow = enrichedHoldings.reduce(function (sum, holding) {
     return sum + holding.valueNow;
   }, 0);
-
+  const fmt = (n: number) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
-    <div className="p-4">
-      <p>Current Balance: ${userPortfolio.currentBalance}</p>
-      <p>Investment: ${totalInvested}</p>
-      <p>Investment Value Now: ${totalValueNow}</p>
-      <h2 className="mt-4 font-semibold">Invested Stocks:</h2>
-      <div className="flex flex-col gap-3 mt-2">
+    <div className="px-4 py-6">
+      <div className="grid gap-6 border-b border-[var(--line)] pb-6 sm:grid-cols-3">
+        <div>
+          <p className="muted text-sm">Current Balance</p>
+          <p className="num text-3xl font-bold sm:text-4xl">${fmt(Number(userPortfolio.currentBalance))}</p>
+        </div>
+        <div>
+          <p className="muted text-sm">Total Invested</p>
+          <p className="num text-3xl font-bold sm:text-4xl">${fmt(totalInvested)}</p>
+        </div>
+        <div>
+          <p className="muted text-sm">Current Value</p>
+          <p className="num text-3xl font-bold sm:text-4xl">${fmt(totalValueNow)}</p>
+        </div>
+      </div>
+  
+      <h2 className="mb-4 mt-8 text-xl font-bold">Holdings</h2>
+      <div className="tile-grid !p-0">
         {enrichedHoldings.map(function (h) {
+          const pnl = h.valueNow - h.valueInvested;
+          const isGain = pnl >= 0;
           return (
-            <div key={h.stockId} className="bg-gray-100 rounded-lg p-4 flex justify-between">
+            <div key={h.stockId} className="tile">
               <div>
-                <p className="font-semibold">{h.symbol}</p>
-                <p className="text-sm text-gray-500">{h.name}</p>
-                <p>Current Price: ${h.currentPrice}</p>
+                <p className="font-bold">{h.symbol}</p>
+                <p className="muted text-sm">{h.name}</p>
               </div>
-              <div className="text-right">
-                <p>My Holdings: {h.quantity}</p>
-                <p>Value Invested: ${h.valueInvested}</p>
-                <p>Value Now: ${h.valueNow}</p>
+              <div className="num mt-4 text-sm">
+                <p className="muted">Qty {h.quantity} @ ${fmt(h.avgBuyPrice)}</p>
+                <p>${fmt(h.valueNow)}</p>
+                <p className={isGain ? "gain" : "loss"}>
+                  {isGain ? "+" : "-"}${fmt(Math.abs(pnl))}
+                </p>
               </div>
             </div>
           );

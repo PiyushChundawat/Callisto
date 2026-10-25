@@ -29,23 +29,29 @@ export default async function StockHistoryPage({
   const isPositive = displayChangePercent >= 0;
 
   return (
-    <div className="p-4">
-      <div className="flex justify-between items-start">
+    <div className="px-4 py-6">
+      <div className="flex flex-wrap items-start justify-between gap-6">
         <div>
           <h1 className="text-2xl font-bold">{stock.symbol}</h1>
-          <p className="text-gray-500">{stock.name}</p>
-          <p className="mt-2">Current price in $: {displayPrice}</p>
-          <p>Current price in Rs.: {(displayPrice * USD_TO_INR).toFixed(0)}</p>
-          <p className={isPositive ? "text-green-600" : "text-red-600"}>
-                {isPositive ? "+" : ""}
-                {displayChangePercent.toFixed(2)}%
+          <div className="relative mt-4">
+            <p className="num relative text-5xl font-bold text-[var(--accent)]">
+              ${displayPrice.toFixed(2)}
+            </p>
+          </div>
+          <p className="muted mt-2">{stock.name}</p>
+          <p className={`num mt-2 ${isPositive ? "gain" : "loss"}`}>
+            {isPositive ? "+" : ""}
+            {displayChangePercent.toFixed(2)}%
           </p>
+          <p className="num muted mt-1 text-sm">Rs. {(displayPrice * USD_TO_INR).toFixed(0)}</p>
         </div>
-        <AddToWatchlistButton symbol={stock.symbol} />
-        <TradeForm symbol={stock.symbol} />
+        <div className="flex flex-col gap-4">
+          <AddToWatchlistButton symbol={stock.symbol} />
+          <TradeForm symbol={stock.symbol} />
+        </div>
       </div>
-
-      <div className="mt-8">
+  
+      <div className="mt-8 border border-[var(--line)] p-4">
         <PriceChart data={history} />
       </div>
     </div>

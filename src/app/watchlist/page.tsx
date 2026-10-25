@@ -44,7 +44,7 @@ export default async function WatchListPage() {
   });
 
   return (
-    <div className="grid grid-cols-4 gap-4 p-4">
+    <div className="tile-grid">
       {resolvedStocks.map(function (stock) {
         return <StockCard key={stock.stockId} stock={stock} />;
       })}

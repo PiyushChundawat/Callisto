@@ -1,1 +1,72 @@
 @import "tailwindcss";
+:root {
+    --bg: #F5F6F1;
+    --fg: #182019;
+    --accent: #A9782E;
+    --gain: #1F8F5F;
+    --loss: #C43D30;
+    --line: #D8DAD0;
+    --strip: #ECEDE5;
+    --grid-line: rgb(216 218 208 / 0.05); /* raise 0.05 if the texture is too faint */
+  }
+  
+  body {
+    min-height: 100vh;
+    color: var(--fg);
+    font-family: var(--font-space-grotesk), sans-serif;
+    background-color: var(--bg);
+    background-image:
+      linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 32px 32px;
+    background-attachment: fixed;
+  }
+  
+  .num { font-family: var(--font-jetbrains-mono), ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  .gain { color: var(--gain); }
+  .loss { color: var(--loss); }
+  .muted { color: rgb(24 32 25 / 0.6); }
+  
+  /* Tiles */
+  .tile-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 24px 16px; }
+  @media (min-width: 640px)  { .tile-grid { grid-template-columns: repeat(3, 1fr); } }
+  @media (min-width: 900px)  { .tile-grid { grid-template-columns: repeat(4, 1fr); } }
+  @media (min-width: 1280px) { .tile-grid { grid-template-columns: repeat(5, 1fr); } }
+  @media (min-width: 1536px) { .tile-grid { grid-template-columns: repeat(6, 1fr); } }
+  
+  .tile {
+    display: flex; flex-direction: column; justify-content: space-between;
+    min-height: 128px; padding: 12px;
+    border: 1px solid var(--line); border-radius: 0;
+    background: var(--bg); transition: background-color 0.15s;
+  }
+  a:hover > .tile { background: #EDEEE6; }
+  
+  /* Form controls */
+  .helios-input {
+    width: 100%; padding: 8px 12px; border-radius: 0;
+    border: 1px solid var(--line); background: var(--bg); color: var(--fg);
+  }
+  .helios-input:focus { outline: 1px solid var(--fg); outline-offset: 0; }
+  .helios-btn {
+    padding: 8px 16px; border-radius: 0; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; font-weight: 500;
+  }
+  .helios-btn-secondary {
+    padding: 8px 16px; border-radius: 0; border: 1px solid var(--line);
+    background: transparent; color: var(--fg); font-weight: 500;
+  }
+  .helios-btn:disabled, .helios-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+  
+  /* Glow behind hero price */
+  .helios-glow {
+    position: absolute; left: -16px; top: -16px; width: 288px; height: 96px;
+    border-radius: 9999px; background: var(--accent);
+    opacity: 0.18; filter: blur(48px); pointer-events: none;
+  }
+  
+  /* Ticker marquee */
+  .ticker-track { animation: helios-marquee 40s linear infinite; }
+  .ticker:hover .ticker-track { animation-play-state: paused; }
+  @keyframes helios-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } }

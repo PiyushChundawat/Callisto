@@ -37,35 +37,38 @@ export default function TradeForm(props: { symbol: string }) {
   }
 
   return (
-    <div className="mt-4 flex items-center gap-3">
-      <input
-        type="number"
-        min="1"
-        value={quantity}
-        onChange={function (event) {
-          setQuantity(event.target.value);
-        }}
-        className="border rounded-lg px-3 py-2 w-24"
-      />
-      <button
-        onClick={function () {
-          handleTrade("buy");
-        }}
-        disabled={status === "submitting"}
-        className="bg-green-200 rounded-lg px-4 py-2"
-      >
-        Buy
-      </button>
-      <button
-        onClick={function () {
-          handleTrade("sell");
-        }}
-        disabled={status === "submitting"}
-        className="bg-red-200 rounded-lg px-4 py-2"
-      >
-        Sell
-      </button>
-      {message ? <span>{message}</span> : null}
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          min="1"
+          value={quantity}
+          onChange={function (event) {
+            setQuantity(event.target.value);
+          }}
+          aria-label="Quantity"
+          className="helios-input num w-24"
+        />
+        <button
+          onClick={function () {
+            handleTrade("buy");
+          }}
+          disabled={status === "submitting"}
+          className="helios-btn"
+        >
+          Buy
+        </button>
+        <button
+          onClick={function () {
+            handleTrade("sell");
+          }}
+          disabled={status === "submitting"}
+          className="helios-btn-secondary"
+        >
+          Sell
+        </button>
+      </div>
+      {message ? <p className="text-sm">{message}</p> : null}
     </div>
   );
 }

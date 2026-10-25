@@ -33,7 +33,7 @@ export default function AddToWatchlistButton(props: { symbol: string }) {
     <button
       onClick={handleClick}
       disabled={status === "saving" || status === "added"}
-      className="bg-gray-200 rounded-lg px-4 py-2"
+      className="helios-btn"
     >
       {status === "added"
         ? "Added ✓"
