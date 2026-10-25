@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 function LoginForm() {
   const router = useRouter();
@@ -12,23 +13,33 @@ function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (loading) return;
     setError("");
+    setLoading(true);
 
-    const result = await signIn("credentials", {
-      email: email,
-      password: password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email: email,
+        password: password,
+        redirect: false,
+      });
 
-    if (result?.error) {
-      setError("Invalid email or password");
-      return;
+      if (result?.error) {
+        setError("Invalid email or password");
+        setLoading(false);
+        return;
+      }
+
+      router.push(callbackUrl);
+      router.refresh();
+    } catch (err) {
+      setError("Could not reach the server. Please try again.");
+      setLoading(false);
     }
-
-    router.push(callbackUrl);
   }
 
   return (
@@ -62,7 +73,13 @@ function LoginForm() {
           />
         </div>
         {error ? <p className="text-sm">{error}</p> : null}
-        <button type="submit" className="helios-btn">Log in</button>
+        <button type="submit" className="helios-btn" disabled={loading}>
+                {loading ? "Logging in..." : "Log in"}
+          </button>
+          <p className="text-sm">
+                Don&apos;t have an account?{" "}
+                <Link href="/signup" className="underline">Sign up</Link>
+          </p>
       </form>
     </div>
   );

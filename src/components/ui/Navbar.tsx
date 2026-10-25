@@ -14,7 +14,7 @@ export default function Navbar() {
   return (
     <nav className="fixed top-0 w-full z-50 bg-white border-b border-gray-200">
       <div className="max-w-screen-xl mx-auto flex items-center justify-between px-4 py-3">
-        <span className="font-semibold text-lg">Helios</span>
+        <span className="font-semibold text-lg">Callisto</span>
         <div className="flex items-center gap-6">
           <ul className="flex gap-6">
             {links.map((link) => (
@@ -41,9 +41,14 @@ export default function Navbar() {
               </button>
             </div>
           ) : (
-            <Link href="/login" className="text-gray-600 hover:text-blue-600">
-              Login
-            </Link>
+            <div className="flex items-center gap-4">
+  <Link href="/login" className="text-gray-600 hover:text-blue-600">
+    Login
+  </Link>
+  <Link href="/signup" className="text-blue-600 font-medium hover:underline">
+    Sign up
+  </Link>
+</div>
           )}
         </div>
       </div>
