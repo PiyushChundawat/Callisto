@@ -23,6 +23,11 @@ async function fetchAllStocks() {
     for (let i = 0; i < batch.length; i++) {
       const symbol = batch[i];
       const data = results[i];
+      const quote = data as unknown as { c?: number; error?: string } | null;
+      if (!quote || quote.error || typeof quote.c !== "number") {
+          console.warn(`Skipping ${symbol}:`, quote?.error ?? "no price");
+          continue;
+      }
       await client.set(`stock:${symbol}`, JSON.stringify(data));
       await client.publish("price-updates", JSON.stringify({ symbol, ...data }));
     }
@@ -72,6 +77,6 @@ async function snapshotToDatabase() {
     };
 
     runFetch();
-    setInterval(runFetch, 60000);
+    setInterval(runFetch, 90000);
     setInterval(runSnapshot, 120000);
   }
