@@ -1,0 +1,52 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PriceHistory {
+  id        Int      @id @default(autoincrement())
+  stockId   String
+  price     Float
+  timestamp DateTime @default(now())
+
+  @@index([stockId, timestamp])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  image        String?
+  passwordHash String?
+  createdAt    DateTime @default(now())
+}
+
+model Watchlist {
+  userId    String   @id
+  stockIds  String[]
+}
+
+model UserPortfolio {
+  userId         String @id
+  currentBalance Float  @default(10000)
+}
+
+model PortfolioHolding {
+  id          String @id @default(cuid())
+  userId      String
+  stockId     String
+  quantity    Float
+  avgBuyPrice Float
+
+  @@unique([userId, stockId])
+}
