@@ -43,11 +43,34 @@ model UserPortfolio {
 }
 
 model PortfolioHolding {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   userId      String
   stockId     String
   quantity    Float
   avgBuyPrice Float
+  todayQty    Float   @default(0)
+  todayDate   String?
 
   @@unique([userId, stockId])
 }
+
+model Order {
+  id             String   @id @default(cuid())
+  userId         String
+  stockId        String
+  side           String
+  source         String?
+  quantity       Float
+  executedPrice  Float
+  total          Float
+  balanceAfter   Float
+  status         String   @default("FILLED")
+  tradeDate      String
+  idempotencyKey String
+  requestHash    String
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, idempotencyKey])
+  @@index([userId, createdAt])
+}
+

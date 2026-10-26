@@ -1,39 +1,53 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 export default function TradeForm(props: { symbol: string }) {
   const [quantity, setQuantity] = useState("1");
   const [status, setStatus] = useState("idle");
   const [message, setMessage] = useState("");
+  const keyRef = useRef<string | null>(null);
 
   async function handleTrade(action: string) {
     setStatus("submitting");
     setMessage("");
 
-    const idempotencyKey = crypto.randomUUID();
-
-    const response = await fetch("/api/trade", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        symbol: props.symbol,
-        action: action,
-        quantity: Number(quantity),
-        idempotencyKey: idempotencyKey,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      setStatus("error");
-      setMessage(data.error ?? "Trade failed");
-      return;
+    // One key per order intent. A retry reuses it, so it cannot double-charge.
+    if (!keyRef.current) {
+      keyRef.current = crypto.randomUUID();
     }
 
-    setStatus("done");
-    setMessage(action === "buy" ? "Bought successfully" : "Sold successfully");
+    try {
+      const response = await fetch("/api/trade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: props.symbol,
+          action: action,
+          quantity: Number(quantity),
+          idempotencyKey: keyRef.current,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setStatus("error");
+        setMessage(data.error ?? "Trade failed");
+        if (response.status < 500) {
+          keyRef.current = null; // a definite answer: the next click is a new order
+        }
+        return;
+      }
+
+      keyRef.current = null;
+      setStatus("done");
+      setMessage(action === "buy" ? "Bought successfully" : "Sold successfully");
+    } catch (err) {
+      // Network failure: keep the key so pressing again is a safe retry.
+      setStatus("error");
+      setMessage("Network problem. Press the button again to retry safely.");
+    }
   }
 
   return (
@@ -44,6 +58,7 @@ export default function TradeForm(props: { symbol: string }) {
           min="1"
           value={quantity}
           onChange={function (event) {
+            keyRef.current = null;
             setQuantity(event.target.value);
           }}
           aria-label="Quantity"

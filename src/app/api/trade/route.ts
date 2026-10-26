@@ -1,155 +1,240 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createHash } from "node:crypto";
+import { Prisma, Order } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getRedisClient, getCurrentPrice } from "@/lib/redis";
+import { getCurrentPrice } from "@/lib/redis";
+import { getTradeDate } from "@/lib/tradeDate";
+
+class TradeError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.status = status;
+  }
+}
+
+function toResult(order: Order, replayed: boolean) {
+  return {
+    orderId: order.id,
+    action: order.side === "BUY" ? "buy" : "sell",
+    symbol: order.stockId,
+    quantity: order.quantity,
+    price: order.executedPrice,
+    total: order.total,
+    balanceAfter: order.balanceAfter,
+    createdAt: order.createdAt.toISOString(),
+    replayed: replayed,
+  };
+}
+
+function replayResponse(order: Order, requestHash: string) {
+  if (order.requestHash !== requestHash) {
+    return NextResponse.json(
+      { error: "This idempotency key was already used for a different request" },
+      { status: 422 }
+    );
+  }
+  return NextResponse.json(toResult(order, true), {
+    status: 200,
+    headers: { "Idempotent-Replayed": "true" },
+  });
+}
 
 export async function POST(request: NextRequest) {
   const session = await auth();
   if (!session || !session.user) {
     return NextResponse.json({ error: "Not logged in" }, { status: 401 });
   }
+  const userId = session.user.id as string;
 
-  const body = await request.json();
-
-  if (!body.symbol || !body.action || !body.quantity || !body.idempotencyKey) {
-    return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  if (body.action !== "buy" && body.action !== "sell") {
+  const symbol = typeof body.symbol === "string" ? body.symbol.toUpperCase() : "";
+  const action = body.action;
+  const quantity = Number(body.quantity);
+  const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
+  const source =
+    body.source === "position" || body.source === "holding" ? body.source : "auto";
+
+  if (!symbol || !idempotencyKey || idempotencyKey.length > 100) {
+    return NextResponse.json({ error: "Missing or invalid fields" }, { status: 400 });
+  }
+  if (action !== "buy" && action !== "sell") {
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   }
-
-  const client = await getRedisClient();
-  const idemKey = `trade:idem:${session.user.id}:${body.idempotencyKey}`;
-
-  // SETNX-with-expiry: only the first request for this key gets past this line
-  const claimed = await client.set(idemKey, "processing", { NX: true, EX: 300 });
-
-  if (!claimed) {
-    const existingValue = await client.get(idemKey);
-
-    if (existingValue === "processing") {
-      return NextResponse.json({ error: "Request already in progress" }, { status: 409 });
-    }
-
-    // A duplicate of an already-completed request — replay the stored
-    // result instead of running the trade twice.
-    return NextResponse.json(JSON.parse(existingValue as string), { status: 200 });
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100000) {
+    return NextResponse.json(
+      { error: "Quantity must be a whole number between 1 and 100000" },
+      { status: 400 }
+    );
   }
 
-  const currentPrice = await getCurrentPrice(body.symbol);
+  const requestHash = createHash("sha256")
+    .update(JSON.stringify([symbol, action, quantity, action === "sell" ? source : null]))
+    .digest("hex");
 
-  if (!currentPrice) {
-    await client.del(idemKey);
+  // Fast path: a repeat of a finished request needs no price and no lock.
+  const existing = await prisma.order.findUnique({
+    where: { userId_idempotencyKey: { userId: userId, idempotencyKey: idempotencyKey } },
+  });
+  if (existing) {
+    return replayResponse(existing, requestHash);
+  }
+
+  // The price always comes from the server, never from the client.
+  const price = await getCurrentPrice(symbol);
+  if (typeof price !== "number") {
     return NextResponse.json({ error: "Price unavailable for this stock" }, { status: 400 });
   }
 
   try {
-    const result = await runTrade(
-      session.user.id,
-      body.symbol,
-      body.action,
-      body.quantity,
-      currentPrice
-    );
-    await client.set(idemKey, JSON.stringify(result), { EX: 300 });
-    return NextResponse.json(result, { status: 200 });
-  } catch (error) {
-    await client.del(idemKey);
-    const message = error instanceof Error ? error.message : "Trade failed";
-    return NextResponse.json({ error: message }, { status: 400 });
-  }
-}
+    const outcome = await prisma.$transaction(
+      async function (tx) {
+        // 1. Make sure the portfolio row exists, then lock it. Every trade by
+        //    this user now waits its turn here.
+        await tx.userPortfolio.createMany({
+          data: [{ userId: userId }],
+          skipDuplicates: true,
+        });
+        const locked = await tx.$queryRaw<{ currentBalance: number }[]>`
+          SELECT "currentBalance" FROM "UserPortfolio"
+          WHERE "userId" = ${userId} FOR UPDATE`;
+        const balance = locked[0].currentBalance;
 
-async function runTrade(
-  userId: string,
-  symbol: string,
-  action: string,
-  quantity: number,
-  currentPrice: number
-) {
-  return await prisma.$transaction(async function (tx) {
-    const portfolio = await tx.userPortfolio.upsert({
-      where: { userId: userId },
-      update: {},
-      create: { userId: userId },
-    });
+        // 2. Re-check the key under the lock. A concurrent duplicate that was
+        //    waiting for us finds our finished order here and replays it.
+        const again = await tx.order.findUnique({
+          where: { userId_idempotencyKey: { userId: userId, idempotencyKey: idempotencyKey } },
+        });
+        if (again) {
+          return { order: again, replayed: true };
+        }
 
-    const holding = await tx.portfolioHolding.findUnique({
-      where: { userId_stockId: { userId: userId, stockId: symbol } },
-    });
+        const today = getTradeDate();
+        const holding = await tx.portfolioHolding.findUnique({
+          where: { userId_stockId: { userId: userId, stockId: symbol } },
+        });
+        const positionQty = holding && holding.todayDate === today ? holding.todayQty : 0;
+        const total = quantity * price;
+        let newBalance = balance;
 
-    if (action === "buy") {
-      const cost = quantity * currentPrice;
+        if (action === "buy") {
+          if (balance < total) {
+            throw new TradeError("Insufficient balance", 400);
+          }
+          newBalance = balance - total;
 
-      if (portfolio.currentBalance < cost) {
-        throw new Error("Insufficient balance");
-      }
+          if (!holding) {
+            await tx.portfolioHolding.create({
+              data: {
+                userId: userId,
+                stockId: symbol,
+                quantity: quantity,
+                avgBuyPrice: price,
+                todayQty: quantity,
+                todayDate: today,
+              },
+            });
+          } else {
+            const newQuantity = holding.quantity + quantity;
+            const newAvg = (holding.quantity * holding.avgBuyPrice + total) / newQuantity;
+            await tx.portfolioHolding.update({
+              where: { userId_stockId: { userId: userId, stockId: symbol } },
+              data: {
+                quantity: newQuantity,
+                avgBuyPrice: newAvg,
+                todayQty: positionQty + quantity,
+                todayDate: today,
+              },
+            });
+          }
+        } else {
+          const holdingQty = holding ? holding.quantity - positionQty : 0;
+          const available =
+            source === "position"
+              ? positionQty
+              : source === "holding"
+              ? holdingQty
+              : holding
+              ? holding.quantity
+              : 0;
 
-      await tx.userPortfolio.update({
-        where: { userId: userId },
-        data: { currentBalance: portfolio.currentBalance - cost },
-      });
+          if (!holding || quantity > available) {
+            throw new TradeError("Not enough shares to sell", 400);
+          }
 
-      if (!holding) {
-        await tx.portfolioHolding.create({
+          const fromPosition =
+            source === "position" ? quantity : source === "holding" ? 0 : Math.min(quantity, positionQty);
+          const remaining = holding.quantity - quantity;
+          newBalance = balance + total;
+
+          if (remaining === 0) {
+            await tx.portfolioHolding.delete({
+              where: { userId_stockId: { userId: userId, stockId: symbol } },
+            });
+          } else {
+            await tx.portfolioHolding.update({
+              where: { userId_stockId: { userId: userId, stockId: symbol } },
+              data: {
+                quantity: remaining,
+                todayQty: positionQty - fromPosition,
+                todayDate: today,
+              },
+            });
+          }
+        }
+
+        await tx.userPortfolio.update({
+          where: { userId: userId },
+          data: { currentBalance: newBalance },
+        });
+
+        // 3. The ledger row doubles as the idempotency record, committed in
+        //    the same transaction as the money movement.
+        const order = await tx.order.create({
           data: {
             userId: userId,
             stockId: symbol,
+            side: action === "buy" ? "BUY" : "SELL",
+            source: action === "sell" ? source.toUpperCase() : null,
             quantity: quantity,
-            avgBuyPrice: currentPrice,
+            executedPrice: price,
+            total: total,
+            balanceAfter: newBalance,
+            tradeDate: today,
+            idempotencyKey: idempotencyKey,
+            requestHash: requestHash,
           },
         });
-      } else {
-        const newQuantity = holding.quantity + quantity;
-        const newAvgBuyPrice =
-          (holding.quantity * holding.avgBuyPrice + cost) / newQuantity;
+        return { order: order, replayed: false };
+      },
+      { maxWait: 10000, timeout: 20000 }
+    );
 
-        await tx.portfolioHolding.update({
-          where: { userId_stockId: { userId: userId, stockId: symbol } },
-          data: { quantity: newQuantity, avgBuyPrice: newAvgBuyPrice },
-        });
+    if (outcome.replayed) {
+      return replayResponse(outcome.order, requestHash);
+    }
+    return NextResponse.json(toResult(outcome.order, false), { status: 200 });
+  } catch (error) {
+    if (error instanceof TradeError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
+    }
+    // Safety net: if the unique constraint ever fires, replay the winner.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const winner = await prisma.order.findUnique({
+        where: { userId_idempotencyKey: { userId: userId, idempotencyKey: idempotencyKey } },
+      });
+      if (winner) {
+        return replayResponse(winner, requestHash);
       }
-
-      return {
-        action: "buy",
-        symbol: symbol,
-        quantity: quantity,
-        price: currentPrice,
-        cost: cost,
-      };
     }
-
-    // action === "sell"
-    if (!holding || holding.quantity < quantity) {
-      throw new Error("Not enough holdings to sell");
-    }
-
-    const proceeds = quantity * currentPrice;
-    const remainingQuantity = holding.quantity - quantity;
-
-    await tx.userPortfolio.update({
-      where: { userId: userId },
-      data: { currentBalance: portfolio.currentBalance + proceeds },
-    });
-
-    if (remainingQuantity === 0) {
-      await tx.portfolioHolding.delete({
-        where: { userId_stockId: { userId: userId, stockId: symbol } },
-      });
-    } else {
-      await tx.portfolioHolding.update({
-        where: { userId_stockId: { userId: userId, stockId: symbol } },
-        data: { quantity: remainingQuantity },
-      });
-    }
-
-    return {
-      action: "sell",
-      symbol: symbol,
-      quantity: quantity,
-      price: currentPrice,
-      proceeds: proceeds,
-    };
-  });
+    console.error("Trade failed:", error);
+    return NextResponse.json({ error: "Trade failed. Please try again." }, { status: 500 });
+  }
 }
