@@ -10,6 +10,7 @@ export default function Navbar() {
         { href: "/", label: "Dashboard" },
         { href: "/watchlist", label: "Watchlist" },
         { href: "/portfolio", label: "Portfolio" },
+        { href: "/engineering", label: "Engineering" },
     ];
   return (
     <nav className="fixed top-0 w-full z-50 bg-white border-b border-gray-200">
