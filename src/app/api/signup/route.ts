@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { issueTpin } from "@/lib/security";
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
@@ -29,6 +30,9 @@ export async function POST(request: NextRequest) {
       name: body.name,
       passwordHash: passwordHash,
     },
+  });
+  await issueTpin(user.id, user.email).catch(function (err) {
+    console.error("TPIN email failed:", err);
   });
 
   return NextResponse.json({ id: user.id, email: user.email }, { status: 201 });

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHash } from "node:crypto";
 import { Prisma, Order } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getCurrentPrice } from "@/lib/redis";
 import { getTradeDate } from "@/lib/tradeDate";
+import { normalizeSource, orderRequestHash } from "@/lib/orderHash";
+import { verifyOtp } from "@/lib/security";
 
 class TradeError extends Error {
   status: number;
@@ -59,8 +60,7 @@ export async function POST(request: NextRequest) {
   const action = body.action;
   const quantity = Number(body.quantity);
   const idempotencyKey = typeof body.idempotencyKey === "string" ? body.idempotencyKey : "";
-  const source =
-    body.source === "position" || body.source === "holding" ? body.source : "auto";
+  const source = normalizeSource(body.source);
 
   if (!symbol || !idempotencyKey || idempotencyKey.length > 100) {
     return NextResponse.json({ error: "Missing or invalid fields" }, { status: 400 });
@@ -75,9 +75,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const requestHash = createHash("sha256")
-    .update(JSON.stringify([symbol, action, quantity, action === "sell" ? source : null]))
-    .digest("hex");
+  const requestHash = orderRequestHash(symbol, action, quantity, source);
 
   // Fast path: a repeat of a finished request needs no price and no lock.
   const existing = await prisma.order.findUnique({
@@ -85,6 +83,15 @@ export async function POST(request: NextRequest) {
   });
   if (existing) {
     return replayResponse(existing, requestHash);
+  }
+  let challengeId = "";
+  if (action === "sell") {
+    challengeId = typeof body.challengeId === "string" ? body.challengeId : "";
+    const otp = typeof body.otp === "string" ? body.otp : "";
+    const otpCheck = await verifyOtp(userId, challengeId, otp, requestHash);
+    if (!otpCheck.ok) {
+      return NextResponse.json({ error: otpCheck.error }, { status: otpCheck.status });
+    }
   }
 
   // The price always comes from the server, never from the client.
@@ -114,6 +121,15 @@ export async function POST(request: NextRequest) {
         });
         if (again) {
           return { order: again, replayed: true };
+        }
+        if (action === "sell") {
+            const consumed = await tx.otpChallenge.updateMany({
+              where: { id: challengeId, userId: userId, usedAt: null },
+              data: { usedAt: new Date() },
+            });
+            if (consumed.count !== 1) {
+              throw new TradeError("This OTP was already used. Please start the sell again.", 403);
+            }
         }
 
         const today = getTradeDate();

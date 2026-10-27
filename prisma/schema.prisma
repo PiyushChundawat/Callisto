@@ -84,3 +84,25 @@ model PasswordResetToken {
 
   @@index([userId])
 }
+
+model TpinCredential {
+  userId         String    @id
+  tpinHash       String
+  failedAttempts Int       @default(0)
+  lockedUntil    DateTime?
+  issuedAt       DateTime  @default(now())
+}
+
+model OtpChallenge {
+  id          String    @id @default(cuid())
+  userId      String
+  purpose     String
+  requestHash String
+  otpHash     String
+  attempts    Int       @default(0)
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
+}

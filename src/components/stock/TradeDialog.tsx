@@ -21,6 +21,8 @@ type Receipt = {
   createdAt: string;
 };
 
+type Step = "loading" | "review" | "tpin" | "otp" | "done";
+
 function money(value: number) {
   return value.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
@@ -34,6 +36,10 @@ function Row(props: { label: string; value: string; strong?: boolean }) {
   );
 }
 
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "").slice(0, 6);
+}
+
 export default function TradeDialog(props: {
   symbol: string;
   action: "buy" | "sell";
@@ -42,12 +48,16 @@ export default function TradeDialog(props: {
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<"loading" | "review" | "done">("loading");
+  const [step, setStep] = useState<Step>("loading");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [quantity, setQuantity] = useState(String(props.initialQuantity ?? 1));
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [info, setInfo] = useState("");
+  const [tpin, setTpin] = useState("");
+  const [otp, setOtp] = useState("");
+  const [challengeId, setChallengeId] = useState("");
   const keyRef = useRef<string | null>(null);
 
   const isBuy = props.action === "buy";
@@ -72,7 +82,7 @@ export default function TradeDialog(props: {
 
   const insufficient = isBuy && preview !== null && total !== null && total > preview.balance;
   const tooMany = !isBuy && preview !== null && qtyValid && qty > maxSell;
-  const canConfirm =
+  const canContinue =
     preview !== null && price !== null && qtyValid && !insufficient && !tooMany && !submitting;
 
   useEffect(
@@ -121,12 +131,78 @@ export default function TradeDialog(props: {
     setQuantity(String(Math.max(1, next)));
   }
 
-  async function confirm() {
-    if (!canConfirm) return;
+  function startOver() {
+    keyRef.current = null;
+    setTpin("");
+    setOtp("");
+    setChallengeId("");
+    setError("");
+    setInfo("");
+    setStep("review");
+  }
+
+  async function submitTpin() {
+    if (submitting || tpin.length !== 6) return;
     setSubmitting(true);
     setError("");
+    setInfo("");
 
-    // One key per order intent. Retrying in this same dialog reuses it.
+    try {
+      const response = await fetch("/api/sell/tpin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: props.symbol,
+          quantity: qty,
+          source: props.source,
+          tpin: tpin,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setError(data.error ?? "Could not verify TPIN");
+      } else {
+        setChallengeId(data.challengeId);
+        setTpin("");
+        setOtp("");
+        setInfo("We emailed you a 6-digit OTP. It expires in 5 minutes.");
+        setStep("otp");
+      }
+    } catch (err) {
+      setError("Network problem. Please try again.");
+    }
+    setSubmitting(false);
+  }
+
+  async function resendTpin() {
+    if (submitting) return;
+    setSubmitting(true);
+    setError("");
+    setInfo("");
+
+    try {
+      const response = await fetch("/api/tpin/resend", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Could not send TPIN");
+      } else {
+        setInfo("A new TPIN was emailed to you.");
+      }
+    } catch (err) {
+      setError("Network problem. Please try again.");
+    }
+    setSubmitting(false);
+  }
+
+  async function placeOrder() {
+    if (submitting || preview === null || price === null || !qtyValid) return;
+    if (!isBuy && otp.length !== 6) return;
+    setSubmitting(true);
+    setError("");
+    setInfo("");
+
+    // One key per order intent. A retry in this same dialog reuses it.
     if (!keyRef.current) {
       keyRef.current = crypto.randomUUID();
     }
@@ -141,6 +217,8 @@ export default function TradeDialog(props: {
           quantity: qty,
           source: props.source,
           idempotencyKey: keyRef.current,
+          challengeId: isBuy ? undefined : challengeId,
+          otp: isBuy ? undefined : otp,
         }),
       });
       const data = await response.json();
@@ -170,6 +248,8 @@ export default function TradeDialog(props: {
       props.onClose();
     }
   }
+
+  const summary = qty + " × " + props.symbol;
 
   return (
     <div
@@ -274,16 +354,16 @@ export default function TradeDialog(props: {
             ) : null}
 
             {insufficient ? <p className="loss text-sm">Not enough balance for this order.</p> : null}
-            {tooMany ? (
-              <p className="loss text-sm">You can sell at most {maxSell} here.</p>
-            ) : null}
+            {tooMany ? <p className="loss text-sm">You can sell at most {maxSell} here.</p> : null}
             {preview && price === null ? (
               <p className="loss text-sm">Price is unavailable right now.</p>
             ) : null}
             {error ? <p className="loss text-sm">{error}</p> : null}
 
             <p className="text-xs opacity-60">
-              The final price is the market price at the moment the order is placed.
+              {isBuy
+                ? "The final price is the market price at the moment the order is placed."
+                : "Selling needs your TPIN and an emailed OTP. The final price is the market price at the moment the order is placed."}
             </p>
 
             <div className="mt-1 flex gap-2">
@@ -294,14 +374,104 @@ export default function TradeDialog(props: {
               >
                 Cancel
               </button>
-              <button onClick={confirm} disabled={!canConfirm} className="helios-btn flex-1">
+              <button
+                onClick={function () {
+                  if (isBuy) {
+                    placeOrder();
+                  } else {
+                    setError("");
+                    setInfo("");
+                    setStep("tpin");
+                  }
+                }}
+                disabled={!canContinue}
+                className="helios-btn flex-1"
+              >
                 {submitting
                   ? "Placing order..."
-                  : error
-                  ? "Try again"
                   : isBuy
-                  ? "Confirm buy"
-                  : "Confirm sell"}
+                  ? error
+                    ? "Try again"
+                    : "Confirm buy"
+                  : "Continue"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {step === "tpin" ? (
+          <div className="flex flex-col gap-3">
+            <h2 className="text-lg font-bold">Enter your TPIN</h2>
+            <p className="text-sm opacity-70">Authorize: sell {summary}</p>
+            <input
+              type="password"
+              inputMode="numeric"
+              autoComplete="off"
+              maxLength={6}
+              value={tpin}
+              placeholder="6-digit TPIN"
+              aria-label="TPIN"
+              className="helios-input num text-center tracking-[0.4em]"
+              onChange={function (event) {
+                setTpin(digitsOnly(event.target.value));
+                setError("");
+              }}
+            />
+            {info ? <p className="text-sm">{info}</p> : null}
+            {error ? <p className="loss text-sm">{error}</p> : null}
+            <button
+              type="button"
+              onClick={resendTpin}
+              disabled={submitting}
+              className="text-left text-sm underline"
+            >
+              Forgot TPIN? Resend by email
+            </button>
+            <div className="mt-1 flex gap-2">
+              <button onClick={startOver} disabled={submitting} className="helios-btn-secondary flex-1">
+                Back
+              </button>
+              <button
+                onClick={submitTpin}
+                disabled={submitting || tpin.length !== 6}
+                className="helios-btn flex-1"
+              >
+                {submitting ? "Checking..." : "Verify TPIN"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {step === "otp" ? (
+          <div className="flex flex-col gap-3">
+            <h2 className="text-lg font-bold">Enter the OTP</h2>
+            <p className="text-sm opacity-70">Authorize: sell {summary}</p>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              maxLength={6}
+              value={otp}
+              placeholder="6-digit OTP"
+              aria-label="OTP"
+              className="helios-input num text-center tracking-[0.4em]"
+              onChange={function (event) {
+                setOtp(digitsOnly(event.target.value));
+                setError("");
+              }}
+            />
+            {info ? <p className="text-sm">{info}</p> : null}
+            {error ? <p className="loss text-sm">{error}</p> : null}
+            <div className="mt-1 flex gap-2">
+              <button onClick={startOver} disabled={submitting} className="helios-btn-secondary flex-1">
+                Start over
+              </button>
+              <button
+                onClick={placeOrder}
+                disabled={submitting || otp.length !== 6}
+                className="helios-btn flex-1"
+              >
+                {submitting ? "Placing order..." : "Confirm sell"}
               </button>
             </div>
           </div>
