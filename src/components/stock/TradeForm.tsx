@@ -303,7 +303,7 @@ export default function TradeForm(props: { symbol: string }) {
                   </button>
                   <button
                     onClick={confirm}
-                    disabled={(!canConfirm && step !== "error") || step === "submitting"}
+                    disabled={step === "submitting" || (step !== "error" && !canConfirm)}
                     className="helios-btn flex-1"
                   >
                     {step === "submitting"
