@@ -73,6 +73,7 @@ function LoginForm() {
           />
         </div>
         {error ? <p className="text-sm">{error}</p> : null}
+        <Link href="/forgot-password" className="text-sm underline">Forgot password?</Link>
         <button type="submit" className="helios-btn" disabled={loading}>
                 {loading ? "Logging in..." : "Log in"}
           </button>
