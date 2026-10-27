@@ -1,8 +1,7 @@
 // src/app/stock/[symbol]/page.tsx
 import { mockStocks } from "@/lib/mockStocks";
 import { notFound } from "next/navigation";
-import PriceChart from "@/components/stock/PriceChart";
-import { prisma } from "@/lib/prisma";
+import CandleChart from "@/components/stock/CandleChart";
 import { getRedisClient } from "@/lib/redis";
 import AddToWatchlistButton from "@/components/stock/AddToWatchlistButton";
 import TradeForm from "@/components/stock/TradeForm";
@@ -19,10 +18,7 @@ export default async function StockHistoryPage({
   const stock = mockStocks.find((s) => s.symbol === symbol.toUpperCase());
   if (!stock) notFound();
 
-  const [history, liveQuote] = await Promise.all([
-    getHistory(stock.symbol),
-    getCurrentPrice(stock.symbol),
-  ]);
+  const liveQuote = await getCurrentPrice(stock.symbol);
 
   const displayPrice = liveQuote?.price ?? stock.currentPrice;
   const displayChangePercent = liveQuote?.changePercent ?? stock.changePercent;
@@ -52,27 +48,13 @@ export default async function StockHistoryPage({
       </div>
   
       <div className="mt-8 border border-[var(--line)] p-4">
-        <PriceChart data={history} />
+      <CandleChart symbol={stock.symbol} />
       </div>
     </div>
   );
 }
 
-async function getHistory(symbol: string) {
-  const client = await getRedisClient();
-  const cacheKey = `history:${symbol}`;
 
-  const cached = await client.get(cacheKey);
-  if (cached) return JSON.parse(cached);
-
-  const rows = await prisma.priceHistory.findMany({
-    where: { stockId: symbol },
-    orderBy: { timestamp: "asc" },
-  });
-
-  await client.set(cacheKey, JSON.stringify(rows), { EX: 180 });
-  return rows;
-}
 
 async function getCurrentPrice(symbol: string) {
     const client = await getRedisClient();

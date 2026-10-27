@@ -37,34 +37,36 @@ async function fetchAllStocks() {
 
   console.log("Fetched and stored all stocks:", new Date().toISOString());
 }
+const lastWrittenT = new Map<string, number>();
 
 async function snapshotToDatabase() {
-    const client = await getRedisClient();
-  
-    const keys = symbols.map((symbol) => `stock:${symbol}`);
-    const values = await client.mGet(keys);
-  
-    const rows = symbols
-      .map((symbol, i) => {
-        const raw = values[i];
-        if (!raw) return null;
-  
-        const data = JSON.parse(raw);
-        return {
-          stockId: symbol,
-          price: data.c,
-          timestamp: new Date(),
-        };
-      })
-      .filter((row): row is NonNullable<typeof row> => row !== null);
-  
-    if (rows.length === 0) {
-      console.log("Snapshot skipped: no price data in Redis yet");
-      return;
-    }
-  
-    await prisma.priceHistory.createMany({ data: rows });
-    console.log(`Snapshot: wrote ${rows.length} rows at`, new Date().toISOString());
+  const client = await getRedisClient();
+  const keys = symbols.map((symbol) => `stock:${symbol}`);
+  const values = await client.mGet(keys);
+
+  const rows: { stockId: string; price: number; timestamp: Date }[] = [];
+  const written: { symbol: string; t: number }[] = [];
+
+  for (let i = 0; i < symbols.length; i++) {
+    const raw = values[i];
+    if (!raw) continue;
+    const data = JSON.parse(raw);
+    if (typeof data.c !== "number") continue; // skips error payloads
+    if (lastWrittenT.get(symbols[i]) === data.t) continue; // no new trade since last snapshot
+    rows.push({ stockId: symbols[i], price: data.c, timestamp: new Date() });
+    written.push({ symbol: symbols[i], t: data.t });
+  }
+
+  if (rows.length === 0) {
+    console.log("Snapshot skipped: no new trades");
+    return;
+  }
+
+  await prisma.priceHistory.createMany({ data: rows });
+  for (const item of written) {
+    lastWrittenT.set(item.symbol, item.t);
+  }
+  console.log(`Snapshot: wrote ${rows.length} rows at`, new Date().toISOString());
 }
   export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return;
