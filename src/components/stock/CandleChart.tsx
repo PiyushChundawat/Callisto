@@ -12,7 +12,7 @@ import {
 
 type Candle = { time: number; open: number; high: number; low: number; close: number };
 
-const RANGES = ["1D", "1W", "1M"] as const;
+const RANGES = ["1D", "1W", "1M", "ALL"] as const;
 type Range = (typeof RANGES)[number];
 
 function usd(value: number) {

@@ -15,32 +15,35 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const safeCallback =
+  callbackUrl.startsWith("/") && !callbackUrl.startsWith("//") ? callbackUrl : "/";
+
   async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (loading) return;
-    setError("");
-    setLoading(true);
+  event.preventDefault();
+  if (loading) return;
+  setError("");
+  setLoading(true);
 
-    try {
-      const result = await signIn("credentials", {
-        email: email,
-        password: password,
-        redirect: false,
-      });
+  try {
+    const result = await signIn("credentials", {
+      email: email,
+      password: password,
+      redirect: false,
+    });
 
-      if (result?.error) {
-        setError("Invalid email or password");
-        setLoading(false);
-        return;
-      }
-
-      router.push(callbackUrl);
-      router.refresh();
-    } catch (err) {
-      setError("Could not reach the server. Please try again.");
+    if (!result || result.error || result.ok === false) {
+      setError("Invalid email or password");
       setLoading(false);
+      return;
     }
+
+    // Full page load, so the new session cookie is used from the first request
+    window.location.assign(safeCallback);
+  } catch (err) {
+    setError("Could not reach the server. Please try again.");
+    setLoading(false);
   }
+}
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4">

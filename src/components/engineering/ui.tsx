@@ -108,43 +108,38 @@ export function Code(props: { children: string }) {
 
 // One card per technology choice. Used heavily in Part 2.
 export function Decision(props: {
-  title: string;
-  chosen: string;
-  why: ReactNode;
-  alternatives: { name: string; verdict: ReactNode }[];
-  industry: ReactNode;
-  tradeoff: ReactNode;
-}) {
-  return (
-    <div className="flex flex-col gap-3 border border-[var(--line)] p-4">
-      <div>
-        <p className="muted text-xs uppercase tracking-wide">{props.title}</p>
-        <p className="text-lg font-bold">{props.chosen}</p>
-      </div>
-      <div>
-        <p className="muted text-xs uppercase tracking-wide">Why this</p>
+    title: string;
+    chosen: string;
+    why: ReactNode;
+    alternatives: { name: string; verdict: ReactNode }[];
+    industry: ReactNode;
+    tradeoff: ReactNode;
+  }) {
+    return (
+      <div className="flex flex-col gap-2 border border-[var(--line)] p-4">
+        <div>
+          <p className="muted text-xs uppercase tracking-wide">{props.title}</p>
+          <p className="text-lg font-bold">{props.chosen}</p>
+        </div>
         <div className="leading-relaxed">{props.why}</div>
+        <div className="text-sm leading-relaxed">
+          <b>Gave up:</b> {props.tradeoff}
+        </div>
+        <details className="text-sm">
+          <summary className="cursor-pointer font-bold">Alternatives and industry practice</summary>
+          <ul className="ml-5 mt-2 list-disc space-y-1 leading-relaxed">
+            {props.alternatives.map(function (alt) {
+              return (
+                <li key={alt.name}>
+                  <b>{alt.name}:</b> {alt.verdict}
+                </li>
+              );
+            })}
+          </ul>
+          <div className="mt-2 leading-relaxed">
+            <b>Industry:</b> {props.industry}
+          </div>
+        </details>
       </div>
-      <div>
-        <p className="muted text-xs uppercase tracking-wide">Alternatives considered</p>
-        <ul className="ml-5 list-disc space-y-1 leading-relaxed">
-          {props.alternatives.map(function (alt) {
-            return (
-              <li key={alt.name}>
-                <b>{alt.name}:</b> {alt.verdict}
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-      <div>
-        <p className="muted text-xs uppercase tracking-wide">How industry does it</p>
-        <div className="leading-relaxed">{props.industry}</div>
-      </div>
-      <div>
-        <p className="muted text-xs uppercase tracking-wide">Trade-off accepted</p>
-        <div className="leading-relaxed">{props.tradeoff}</div>
-      </div>
-    </div>
-  );
+    );
 }

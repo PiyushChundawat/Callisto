@@ -13,7 +13,7 @@ export default function RowActions(props: {
   return (
     <div className="mt-3 flex gap-2">
       <button
-        className="helios-btn-secondary"
+        className="helios-btn btn-anim btn-buy"
         onClick={function () {
           setAction("buy");
         }}
@@ -21,7 +21,7 @@ export default function RowActions(props: {
         Add
       </button>
       <button
-        className="helios-btn-secondary"
+        className="helios-btn btn-anim btn-sell"
         onClick={function () {
           setAction("sell");
         }}

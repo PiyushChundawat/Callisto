@@ -12,7 +12,7 @@ export default function TradeForm(props: { symbol: string }) {
         onClick={function () {
           setAction("buy");
         }}
-        className="helios-btn"
+        className="helios-btn btn-anim btn-buy"
       >
         Buy
       </button>
@@ -20,7 +20,7 @@ export default function TradeForm(props: { symbol: string }) {
         onClick={function () {
           setAction("sell");
         }}
-        className="helios-btn-secondary"
+        className="helios-btn btn-anim btn-sell"
       >
         Sell
       </button>
