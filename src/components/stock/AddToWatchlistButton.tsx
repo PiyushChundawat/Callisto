@@ -3,45 +3,61 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function AddToWatchlistButton(props: { symbol: string }) {
+export default function AddToWatchlistButton(props: { symbol: string; initialAdded: boolean }) {
   const router = useRouter();
-  const [status, setStatus] = useState("idle");
+  const [added, setAdded] = useState(props.initialAdded);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   async function handleClick() {
-    setStatus("saving");
+    if (busy) return;
+    const wasAdded = added;
+    setBusy(true);
+    setError("");
+    setAdded(!wasAdded); // update the button immediately; undone below if the server says no
 
-    const response = await fetch("/api/watchlist", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ symbol: props.symbol }),
-    });
+    try {
+      const response = await fetch("/api/watchlist", {
+        method: wasAdded ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol: props.symbol }),
+      });
 
-    if (response.status === 401) {
-      router.push("/login?callbackUrl=/stock/" + props.symbol);
-      return;
+      if (response.status === 401) {
+        setAdded(wasAdded);
+        router.push("/login?callbackUrl=/stock/" + props.symbol);
+        return;
+      }
+
+      if (!response.ok) {
+        setAdded(wasAdded);
+        setError("Could not update. Please try again.");
+      } else {
+        router.refresh();
+      }
+    } catch (err) {
+      setAdded(wasAdded);
+      setError("Network problem. Please try again.");
     }
-
-    if (!response.ok) {
-      setStatus("error");
-      return;
-    }
-
-    setStatus("added");
+    setBusy(false);
   }
 
   return (
-    <button
-      onClick={handleClick}
-      disabled={status === "saving" || status === "added"}
-      className="helios-btn"
-    >
-      {status === "added"
-        ? "Added ✓"
-        : status === "saving"
-        ? "Adding..."
-        : status === "error"
-        ? "Try again"
-        : "Add to Watchlist"}
-    </button>
+    <div className="flex flex-col gap-1">
+      <button
+        onClick={handleClick}
+        disabled={busy}
+        className={added ? "helios-btn-secondary" : "helios-btn"}
+      >
+        {busy
+          ? added
+            ? "Adding..."
+            : "Removing..."
+          : added
+          ? "✓ In Watchlist · Remove"
+          : "Add to Watchlist"}
+      </button>
+      {error ? <p className="loss text-sm">{error}</p> : null}
+    </div>
   );
 }

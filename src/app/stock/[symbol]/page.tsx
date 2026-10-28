@@ -5,6 +5,10 @@ import CandleChart from "@/components/stock/CandleChart";
 import { getRedisClient } from "@/lib/redis";
 import AddToWatchlistButton from "@/components/stock/AddToWatchlistButton";
 import TradeForm from "@/components/stock/TradeForm";
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
 
 const USD_TO_INR = 83;
 
@@ -17,6 +21,16 @@ export default async function StockHistoryPage({
 
   const stock = mockStocks.find((s) => s.symbol === symbol.toUpperCase());
   if (!stock) notFound();
+
+  // Is this stock already on the logged-in user's watchlist?
+  const session = await auth();
+  let inWatchlist = false;
+  if (session && session.user) {
+    const watchlist = await prisma.watchlist.findUnique({
+      where: { userId: session.user.id as string },
+    });
+    inWatchlist = watchlist ? watchlist.stockIds.includes(stock.symbol) : false;
+  }
 
   const liveQuote = await getCurrentPrice(stock.symbol);
 
@@ -42,24 +56,21 @@ export default async function StockHistoryPage({
           <p className="num muted mt-1 text-sm">Rs. {(displayPrice * USD_TO_INR).toFixed(0)}</p>
         </div>
         <div className="flex flex-col gap-4">
-          <AddToWatchlistButton symbol={stock.symbol} />
+          <AddToWatchlistButton symbol={stock.symbol} initialAdded={inWatchlist} />
           <TradeForm symbol={stock.symbol} />
         </div>
       </div>
-  
       <div className="mt-8 border border-[var(--line)] p-4">
-      <CandleChart symbol={stock.symbol} />
+        <CandleChart symbol={stock.symbol} />
       </div>
     </div>
   );
 }
 
-
-
 async function getCurrentPrice(symbol: string) {
-    const client = await getRedisClient();
-    const raw = await client.get(`stock:${symbol}`);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    return { price: data.c, changePercent: data.dp };
-  }
+  const client = await getRedisClient();
+  const raw = await client.get(`stock:${symbol}`);
+  if (!raw) return null;
+  const data = JSON.parse(raw);
+  return { price: data.c, changePercent: data.dp };
+}

@@ -19,11 +19,20 @@ app.prepare().then(async () => {
   subscriber.on("error", (err) => console.error("Redis subscriber error:", err));
   await subscriber.connect();
 
+  let broadcastCount = 0;
+
   await subscriber.subscribe("price-updates", (message) => {
     const data = JSON.parse(message);
-    console.log("Broadcasting:", data);
+    broadcastCount++;
     io.emit("price-update", data);
   });
+
+  setInterval(function () {
+    console.log(
+      "Pushed " + broadcastCount + " price updates to " + io.engine.clientsCount + " connected clients in the last minute"
+    );
+    broadcastCount = 0;
+  }, 60000);
 
   io.on("connection", (socket) => {
     console.log("Client connected:", socket.id);

@@ -28,7 +28,7 @@ function LowLevel() {
           [<Mono key="4">/api/stock/[symbol]/history</Mono>, "GET", "Candles for ?range=1D, 1W or 1M"],
           [<Mono key="5">/api/trade/preview</Mono>, "GET", "Price, balance and shares owned for the review step"],
           [<Mono key="6">/api/trade</Mono>, "POST", "Place an order (idempotent)"],
-          [<Mono key="7">/api/watchlist</Mono>, "GET, POST", "Read and change the watchlist"],
+          [<Mono key="7">/api/watchlist</Mono>, "GET, POST, DELETE", "Read, add to, and remove from the watchlist"],
           [<Mono key="8">/api/sell/tpin</Mono>, "POST", "Check the TPIN, email an OTP"],
           [<Mono key="9">/api/tpin/resend</Mono>, "POST", "Email a new TPIN"],
           [<Mono key="10">/api/password/forgot</Mono>, "POST", "Email a reset link"],

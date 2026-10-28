@@ -12,30 +12,33 @@ function delay(ms: number) {
 }
 
 async function fetchAllStocks() {
-  const client = await getRedisClient();
-  const batches = chunkArray(symbols, 5);
+    const client = await getRedisClient();
+    const batches = chunkArray(symbols, 5);
+    let okCount = 0;
+    let failedCount = 0;
 
-  for (const batch of batches) {
-    const results = await Promise.all(
-      batch.map((symbol) => fetchQuote(symbol))
-    );
+    for (const batch of batches) {
+      const results = await Promise.all(batch.map((symbol) => fetchQuote(symbol)));
 
-    for (let i = 0; i < batch.length; i++) {
-      const symbol = batch[i];
-      const data = results[i];
-      const quote = data as unknown as { c?: number; error?: string } | null;
-      if (!quote || quote.error || typeof quote.c !== "number") {
-          console.warn(`Skipping ${symbol}:`, quote?.error ?? "no price");
+      for (let i = 0; i < batch.length; i++) {
+        const symbol = batch[i];
+        const data = results[i];
+        const quote = data as unknown as { c?: number; error?: string } | null;
+
+        if (!quote || quote.error || typeof quote.c !== "number") {
+          failedCount++;
           continue;
+        }
+
+        await client.set(`stock:${symbol}`, JSON.stringify(data));
+        await client.publish("price-updates", JSON.stringify({ symbol, ...data }));
+        okCount++;
       }
-      await client.set(`stock:${symbol}`, JSON.stringify(data));
-      await client.publish("price-updates", JSON.stringify({ symbol, ...data }));
+
+      await delay(500);
     }
 
-    await delay(500); // small pause before the next batch
-  }
-
-  console.log("Fetched and stored all stocks:", new Date().toISOString());
+    console.log(`Fetch cycle: ${okCount} ok, ${failedCount} failed at`, new Date().toISOString());
 }
 const lastWrittenT = new Map<string, number>();
 
