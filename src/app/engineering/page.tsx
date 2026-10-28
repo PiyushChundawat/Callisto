@@ -4,13 +4,14 @@ import type { SectionDef } from "@/components/engineering/ui";
 import { part1 } from "@/components/engineering/part1";
 import { part2 } from "@/components/engineering/part2";
 import { part3 } from "@/components/engineering/part3";
+import { part4 } from "@/components/engineering/part4";
 
 export const metadata = {
   title: "Engineering | Callisto",
   description: "How Callisto is built: design, decisions, trade-offs, and results.",
 };
 
-const sections: SectionDef[] = [...part1, ...part2, ...part3];
+const sections: SectionDef[] = [...part1, ...part2, ...part3, ...part4];
 
 export default function EngineeringPage() {
   return (
