@@ -20,6 +20,15 @@ type EmailInput = {
     });
   
     const raw = await response.text();
+  
+    if (raw.trimStart().startsWith("<")) {
+      throw new Error(
+        "Mail relay returned a web page (HTTP " +
+          response.status +
+          "), not JSON. Check: Web app deployed with access set to Anyone, URL ends with /exec, permissions authorized."
+      );
+    }
+  
     let data: any = null;
     try {
       data = JSON.parse(raw);
@@ -28,7 +37,7 @@ type EmailInput = {
     }
   
     if (!response.ok || !data || data.ok !== true) {
-      throw new Error("Mail relay failed: " + response.status + " " + raw.slice(0, 200));
+      throw new Error("Mail relay failed: HTTP " + response.status + " " + raw.slice(0, 200));
     }
   }
   
@@ -56,11 +65,10 @@ type EmailInput = {
   }
   
   export async function sendEmail(input: EmailInput) {
-    // Order: Google Apps Script relay, then Brevo, then print to the terminal.
-    // Render's free tier blocks SMTP, so both real options use HTTPS.
     const relayUrl = process.env.MAIL_RELAY_URL;
     const relaySecret = process.env.MAIL_RELAY_SECRET;
     if (relayUrl && relaySecret) {
+      console.log("[email] sending through the Google relay");
       await sendViaRelay(input, relayUrl, relaySecret);
       return;
     }
@@ -68,6 +76,7 @@ type EmailInput = {
     const apiKey = process.env.BREVO_API_KEY;
     const fromEmail = process.env.EMAIL_FROM;
     if (apiKey && fromEmail) {
+      console.log("[email] relay not configured, sending through Brevo");
       await sendViaBrevo(input, apiKey, fromEmail);
       return;
     }
