@@ -98,8 +98,9 @@ export default function CandleChart(props: { symbol: string }) {
     function () {
       let cancelled = false;
       setStatus("loading");
+      const apiRange = range === "ALL" ? "1M" : range;
 
-      fetch("/api/stock/" + props.symbol + "/history?range=" + range)
+      fetch("/api/stock/" + props.symbol + "/history?range=" + apiRange)
         .then(function (response) {
           if (!response.ok) throw new Error("bad response");
           return response.json();
