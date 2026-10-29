@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ sym
   const range = request.nextUrl.searchParams.get("range");
   const client = await getRedisClient();
 
-  // No range given: raw rows (kept for the engineering page comparison)
+  // No range given: raw rows (used only by the comparison script)
   if (!range) {
     const legacyKey = `history:${symbol}`;
     const legacyCached = await client.get(legacyKey);
